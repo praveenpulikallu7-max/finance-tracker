@@ -1,0 +1,154 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloud Bank Finance Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: Arial; background:#f2f5f9; margin:0; padding:20px; }
+    .container { max-width:700px; margin:auto; background:white; padding:20px; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.1); }
+    input, select, button { width:100%; padding:10px; margin:6px 0; border-radius:6px; border:1px solid #ccc; }
+    button { cursor:pointer; border:none; font-weight:bold; }
+    .income { background:#28a745; color:white; }
+    .expense { background:#dc3545; color:white; }
+    .secondary { background:#6c757d; color:white; }
+    table { width:100%; border-collapse:collapse; margin-top:10px; }
+    table, th, td { border:1px solid #ddd; }
+    th, td { padding:6px; text-align:center; }
+  </style>
+</head>
+<body>
+
+<div class="container" id="authBox">
+  <h2>Login / Register</h2>
+  <input type="email" id="email" placeholder="Email">
+  <input type="password" id="password" placeholder="Password">
+  <button onclick="signUp()">Register</button>
+  <button onclick="signIn()">Login</button>
+</div>
+
+<div class="container" id="appBox" style="display:none;">
+  <h2>Cloud Bank Tracker</h2>
+
+  <select id="bank">
+    <option>SBI</option>
+    <option>DBS</option>
+    <option>APGB</option>
+  </select>
+
+  <select id="category">
+    <option>Salary</option>
+    <option>Business</option>
+    <option>Food</option>
+    <option>Travel</option>
+    <option>Shopping</option>
+    <option>Rent</option>
+    <option>Utilities</option>
+    <option>Medical</option>
+    <option>Other</option>
+  </select>
+
+  <input type="number" id="amount" placeholder="Amount">
+  <input type="date" id="date">
+  <input type="text" id="note" placeholder="Note">
+
+  <button class="income" onclick="addTransaction('Income')">Credit</button>
+  <button class="expense" onclick="addTransaction('Expense')">Debit</button>
+  <button class="secondary" onclick="logout()">Logout</button>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Bank</th>
+        <th>Type</th>
+        <th>Category</th>
+        <th>Amount</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody"></tbody>
+  </table>
+</div>
+
+<script>
+const supabase = window.supabase.createClient(
+  "https://rzraxtjmlwejzehfisid.supabase.co",
+  "sb_publishable_ASeSdhwuRfsTrhREMiR2hA_WRrbM-KM"
+);
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("date").valueAsDate = new Date();
+});
+
+async function signUp(){
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+  const { error } = await supabase.auth.signUp({ email, password });
+  if(error) alert(error.message);
+  else alert("Check your email to confirm registration.");
+}
+
+async function signIn(){
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if(error) alert(error.message);
+  else {
+    document.getElementById("authBox").style.display="none";
+    document.getElementById("appBox").style.display="block";
+    loadTransactions();
+  }
+}
+
+async function logout(){
+  await supabase.auth.signOut();
+  location.reload();
+}
+
+async function addTransaction(type){
+  const { data: { user } } = await supabase.auth.getUser();
+  if(!user) return alert("Login first");
+
+  const bank = document.getElementById("bank").value;
+  const category = document.getElementById("category").value;
+  const amount = parseFloat(document.getElementById("amount").value);
+  const date = document.getElementById("date").value;
+  const note = document.getElementById("note").value;
+
+  await supabase.from("transactions").insert([{
+    user_id: user.id,
+    bank, type, category, amount, date, note
+  }]);
+
+  document.getElementById("amount").value="";
+  document.getElementById("note").value="";
+  loadTransactions();
+}
+
+async function loadTransactions(){
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data } = await supabase
+    .from("transactions")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("date", { ascending:false });
+
+  const body = document.getElementById("tableBody");
+  body.innerHTML="";
+  data.forEach(t=>{
+    body.innerHTML += `
+      <tr>
+        <td>${t.date}</td>
+        <td>${t.bank}</td>
+        <td>${t.type}</td>
+        <td>${t.category}</td>
+        <td>₹ ${t.amount}</td>
+      </tr>`;
+  });
+}
+</script>
+
+</body>
+</html>
