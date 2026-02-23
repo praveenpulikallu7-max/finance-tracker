@@ -1,24 +1,62 @@
-
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Cloud Bank Finance Tracker</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <title>Cloud Bank Tracker</title>
+
   <style>
-    body { font-family: Arial; background:#f2f5f9; margin:0; padding:20px; }
-    .container { max-width:700px; margin:auto; background:white; padding:20px; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.1); }
-    input, select, button { width:100%; padding:10px; margin:6px 0; border-radius:6px; border:1px solid #ccc; }
-    button { cursor:pointer; border:none; font-weight:bold; }
-    .income { background:#28a745; color:white; }
-    .expense { background:#dc3545; color:white; }
-    .secondary { background:#6c757d; color:white; }
-    table { width:100%; border-collapse:collapse; margin-top:10px; }
-    table, th, td { border:1px solid #ddd; }
-    th, td { padding:6px; text-align:center; }
+    body {
+      font-family: Arial;
+      background: #111;
+      color: white;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: auto;
+      background: #1e1e1e;
+      padding: 20px;
+      border-radius: 10px;
+    }
+
+    input, select, button {
+      width: 100%;
+      padding: 10px;
+      margin: 6px 0;
+      border-radius: 6px;
+      border: none;
+      font-size: 14px;
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .credit { background: #28a745; color: white; }
+    .debit { background: #dc3545; color: white; }
+    .secondary { background: #007bff; color: white; }
+    .logout { background: gray; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+
+    th, td {
+      border: 1px solid #444;
+      padding: 6px;
+      text-align: center;
+      font-size: 13px;
+    }
+
+    th { background: #222; }
   </style>
 </head>
+
 <body>
 
 <div class="container" id="authBox">
@@ -54,9 +92,10 @@
   <input type="date" id="date">
   <input type="text" id="note" placeholder="Note">
 
-  <button class="income" onclick="addTransaction('Income')">Credit</button>
-  <button class="expense" onclick="addTransaction('Expense')">Debit</button>
-  <button class="secondary" onclick="logout()">Logout</button>
+  <button class="credit" onclick="addTransaction('Income')">Credit</button>
+  <button class="debit" onclick="addTransaction('Expense')">Debit</button>
+  <button class="secondary" onclick="showBalances()">View Balances</button>
+  <button class="logout" onclick="logout()">Logout</button>
 
   <table>
     <thead>
@@ -66,6 +105,7 @@
         <th>Type</th>
         <th>Category</th>
         <th>Amount</th>
+        <th>Action</th>
       </tr>
     </thead>
     <tbody id="tableBody"></tbody>
@@ -80,28 +120,36 @@ const supabase = createClient(
   "sb_publishable_ASeSdhwuRfsTrhREMiR2hA_WRrbM-KM"
 );
 
+document.getElementById("date").valueAsDate = new Date();
+
 async function signUp() {
-  const email = document.getElementById("email").value;
-  const password = document.getElementById("password").value;
-
+  const email = email.value;
+  const password = password.value;
   const { error } = await supabase.auth.signUp({ email, password });
-
   if (error) alert(error.message);
-  else alert("Registered successfully! Now login.");
+  else alert("Registered successfully!");
 }
 
 async function signIn() {
-  const email = document.getElementById("email").value;
-  const password = document.getElementById("password").value;
+  const emailVal = email.value;
+  const passwordVal = password.value;
 
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error } = await supabase.auth.signInWithPassword({
+    email: emailVal,
+    password: passwordVal
+  });
 
   if (error) alert(error.message);
   else {
-    document.getElementById("authBox").style.display = "none";
-    document.getElementById("appBox").style.display = "block";
+    authBox.style.display = "none";
+    appBox.style.display = "block";
     loadTransactions();
   }
+}
+
+async function logout() {
+  await supabase.auth.signOut();
+  location.reload();
 }
 
 async function addTransaction(type) {
@@ -114,20 +162,13 @@ async function addTransaction(type) {
   const note = document.getElementById("note").value;
 
   const { error } = await supabase.from("transactions").insert([
-    {
-      user_id: user.id,
-      bank,
-      type,
-      category,
-      amount,
-      date,
-      note
-    }
+    { user_id: user.id, bank, type, category, amount, date, note }
   ]);
 
-  if (error) {
-    alert(error.message);
-  } else {
+  if (!error) {
+    document.getElementById("amount").value = "";
+    document.getElementById("note").value = "";
+    document.getElementById("category").selectedIndex = 0;
     loadTransactions();
   }
 }
@@ -152,14 +193,52 @@ async function loadTransactions() {
         <td>${t.type}</td>
         <td>${t.category}</td>
         <td>₹ ${t.amount}</td>
+        <td>
+          <button onclick="deleteTransaction('${t.id}')" style="background:red;color:white;border:none;padding:5px;border-radius:4px;">
+            Delete
+          </button>
+        </td>
       </tr>
     `;
   });
 }
 
+async function deleteTransaction(id) {
+  const confirmDelete = confirm("Delete this transaction?");
+  if (!confirmDelete) return;
+
+  await supabase.from("transactions").delete().eq("id", id);
+  loadTransactions();
+}
+
+async function showBalances() {
+  const { data: { user } } = await supabase.auth.getUser();
+
+  const { data } = await supabase
+    .from("transactions")
+    .select("*")
+    .eq("user_id", user.id);
+
+  let balances = { SBI: 0, DBS: 0, APGB: 0 };
+
+  data.forEach(t => {
+    if (t.type === "Income") balances[t.bank] += t.amount;
+    else balances[t.bank] -= t.amount;
+  });
+
+  alert(
+    "SBI: ₹ " + balances.SBI +
+    "\nDBS: ₹ " + balances.DBS +
+    "\nAPGB: ₹ " + balances.APGB
+  );
+}
+
 window.signUp = signUp;
 window.signIn = signIn;
 window.addTransaction = addTransaction;
+window.deleteTransaction = deleteTransaction;
+window.showBalances = showBalances;
+window.logout = logout;
 </script>
 
 </body>
